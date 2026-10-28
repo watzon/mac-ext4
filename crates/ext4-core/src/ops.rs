@@ -120,7 +120,7 @@ impl Volume {
         inode
     }
 
-    fn uses_extents(&self) -> bool {
+    pub(crate) fn uses_extents(&self) -> bool {
         self.sb.has_incompat(incompat::EXTENTS)
     }
 

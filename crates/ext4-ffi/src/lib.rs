@@ -444,6 +444,7 @@ pub struct ext4fs_statfs {
     pub label: [c_char; 68],
     pub flavor: [c_char; 8],
     pub read_only: bool,
+    pub max_file_size: u64,
 }
 
 fn fill_statfs(o: &mut ext4fs_statfs, s: &StatFs) {
@@ -458,6 +459,7 @@ fn fill_statfs(o: &mut ext4fs_statfs, s: &StatFs) {
     copy_str(&mut o.label, &s.label);
     copy_str(&mut o.flavor, s.flavor);
     o.read_only = s.read_only;
+    o.max_file_size = s.max_file_size;
 }
 
 #[no_mangle]

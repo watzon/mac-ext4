@@ -97,7 +97,7 @@ Use the BSD identifier of the partition from `diskutil list`, not the whole disk
 
 ## Formatting
 
-Disk Utility can erase drives and partitions as **Linux ext4**. (ext2 and ext3 are left out of its menu on purpose: Disk Utility gives every format with a distinct internal type its own menu section, and only Apple's ExFAT and MS-DOS are grouped by a hardcoded exception. Use `ext4 mkfs -t ext3` or `newfs_fskit -t ext3` for those.) Its Erase menu lists formats from `/Library/Filesystems/*.fs` bundles that declare `FSFormatExecutable`; FSKit modules are not consulted. `ext4.fs` declares `Contents/Resources/newfs_ext4`, which is the `ext4` CLI behaving as a `newfs` formatter (`-v NAME`, `-t ext2|ext3|ext4`, device last, no prompts). Erasing a whole drive with the GUID scheme creates the partition with the Linux file system type (`FSFormatContentMask`). The same works from Terminal without `sudo`, because storagekitd runs the formatter:
+Disk Utility can erase drives and partitions as **Linux ext4**. (ext2 and ext3 are left out of its menu on purpose: Disk Utility gives every format with a distinct internal type its own menu section, and only Apple's ExFAT and MS-DOS are grouped by a hardcoded exception. Use `ext4 mkfs -t ext3` or `newfs_fskit -t ext3` for those.) Its Erase menu lists formats from `/Library/Filesystems/*.fs` bundles that declare `FSFormatExecutable`; FSKit modules are not consulted. `ext4.fs` declares `Contents/Resources/newfs_ext4`, which is the `ext4` CLI behaving as a `newfs` formatter (`-v NAME`, `-t ext2|ext3|ext4`, device last, no prompts). Erasing a whole drive with the GUID scheme creates the partition with the Linux file system type. `FSFormatContentMask` must be MediaKit's type name `Linux`: with the GUID (or "Linux Filesystem") there, Disk Utility also carves an Apple_Boot "Boot OS X" partition out of the target. The same works from Terminal without `sudo`, because storagekitd runs the formatter:
 
 ```sh
 diskutil listFilesystems                       # shows ext4 ("Linux ext4")
@@ -144,6 +144,12 @@ ext4 check -n target/img/test.img
 ```
 
 `put`, `mkdir`, `rm`, `mv`, and `ln -s` mount the image read-write internally and unmount it cleanly. Path traversal is rooted at the filesystem root and does not follow symbolic links. For raw disks, use `diskN`, `diskNsM`, `/dev/diskNsM`, or `/dev/rdiskNsM`; the tool selects the raw device form. `mkfs` refuses mounted devices and partitioned whole disks unless `-f`, and requests confirmation unless `-f` or `--yes` is passed.
+
+LaunchServices registers every `Ext4.app` that a build produces. If `fskit_agent` picks one of these copies, RunningBoard refuses to start the module ("Client not authorized" in the `fskit_agent` log) and mounts fail with "unsupported". `scripts/install.sh` and `scripts/package.sh` unregister their build copies. To find stray registrations:
+
+```sh
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -dump | grep -E '^path:.*Ext4'
+```
 
 ## Debugging
 

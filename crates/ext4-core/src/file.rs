@@ -42,8 +42,18 @@ impl Volume {
     /// `huge_file`, `i_blocks` is a 32-bit count of 512-byte sectors, so the
     /// size is capped at what that count can describe.
     pub fn max_file_size(&self, inode: &Inode) -> u64 {
+        self.max_size_for_mapping(inode.has_flag(FL_EXTENTS))
+    }
+
+    /// Largest size of a new file: new files use extents when the volume
+    /// has the `extent` feature, and block maps otherwise.
+    pub fn max_new_file_size(&self) -> u64 {
+        self.max_size_for_mapping(self.uses_extents())
+    }
+
+    fn max_size_for_mapping(&self, extents: bool) -> u64 {
         let huge = self.sb.has_ro_compat(ro_compat::HUGE_FILE);
-        if !inode.has_flag(FL_EXTENTS) {
+        if !extents {
             return crate::blockmap::max_size(self.block_size, huge);
         }
         let bits = self.block_size.trailing_zeros();

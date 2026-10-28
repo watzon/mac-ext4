@@ -52,6 +52,8 @@ pub struct StatFs {
     pub uuid: [u8; 16],
     pub flavor: &'static str,
     pub read_only: bool,
+    /// Largest size of a new file on this volume, in bytes.
+    pub max_file_size: u64,
 }
 
 /// A mounted ext2/3/4 file system.
@@ -180,6 +182,7 @@ impl Filesystem {
             uuid: sb.uuid(),
             flavor: crate::volume::flavor(sb),
             read_only: v.is_read_only() || sb.state() & STATE_ERROR != 0,
+            max_file_size: v.max_new_file_size(),
         }
     }
 

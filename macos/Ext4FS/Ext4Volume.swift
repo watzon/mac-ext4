@@ -36,7 +36,11 @@ final class Ext4Volume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
     var restrictsOwnershipChanges: Bool { true }
     var truncatesLongNames: Bool { false }
     var maximumXattrSize: Int { 65_536 }
-    var maximumFileSize: UInt64 { UInt64.max }
+    /// Set from the engine at activation. It must be a real limit: FSKit
+    /// derives FILESIZEBITS from it, and UInt64.max came out as 0 bits,
+    /// so Finder refused to copy files of 4 GiB and more.
+    private var fileSizeLimit: UInt64 = (UInt64(UInt32.max)) << 12
+    var maximumFileSize: UInt64 { fileSizeLimit }
     var supportedVolumeCapabilities: FSVolume.SupportedCapabilities {
         let capabilities = FSVolume.SupportedCapabilities()
         capabilities.supportsPersistentObjectIDs = true
@@ -111,6 +115,10 @@ final class Ext4Volume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
         }
         pointer = mounted
         readOnly = requestedReadOnly || optionReadOnly || mountedReadOnly
+        var stat = ext4fs_statfs()
+        if ext4fs_statfs_get(mounted, &stat) == 0, stat.max_file_size > 0 {
+            fileSizeLimit = stat.max_file_size
+        }
         publish(UInt64(EXT4FS_ROOT_INO)) { reply($0, nil) }
     }
 

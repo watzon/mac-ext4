@@ -118,6 +118,7 @@ typedef struct ext4fs_statfs {
     char label[68];
     char flavor[8];
     bool read_only;
+    uint64_t max_file_size;  /* largest size of a new file, in bytes */
 } ext4fs_statfs;
 
 int32_t ext4fs_statfs_get(ext4fs_volume *vol, ext4fs_statfs *out);

@@ -116,6 +116,13 @@ fn abi_round_trip() {
 
         let mut st: ext4fs_statfs = std::mem::zeroed();
         assert_eq!(ext4fs_statfs_get(vol, &mut st), 0);
+        // The module reports this as its maximum file size, and macOS turns
+        // it into FILESIZEBITS. ext4 with extents and huge_file allows
+        // 2^32 - 1 blocks.
+        assert_eq!(
+            st.max_file_size,
+            u64::from(u32::MAX) * u64::from(st.block_size)
+        );
         assert_eq!(
             std::ffi::CStr::from_ptr(st.label.as_ptr())
                 .to_str()

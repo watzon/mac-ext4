@@ -50,6 +50,10 @@ else
     sudo /usr/bin/ditto "${app_source}" "${app_destination}"
 fi
 
+# LaunchServices registered the build copy too. fskit_agent may start the
+# module from it, which RunningBoard refuses ("Client not authorized").
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "${app_source}" 2>/dev/null || true
+
 # Finder takes format names from Filesystems/<type>.fs bundles, not from
 # FSKit modules. Install a metadata-only bundle so it shows "Linux ext4".
 # Its Contents/Resources/newfs_ext4 is the CLI, which Disk Utility runs to erase

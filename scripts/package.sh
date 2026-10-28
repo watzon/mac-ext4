@@ -56,6 +56,9 @@ fi
 
 rm -rf "${work}"
 mkdir -p "${work}" "${dist}"
+# Keep Spotlight out: it registers every app it finds with LaunchServices
+# (see the cleanup at the end).
+touch "${work}/.metadata_never_index"
 xcodegen_bin="$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)"
 "${xcodegen_bin}" generate --spec "${macos}/project.yml" --project "${macos}" >/dev/null
 
@@ -68,13 +71,13 @@ archive="${work}/Ext4.xcarchive"
 echo "==> Building Ext4 ${version} (${build_number}), signing: ${signing}"
 case "${signing}" in
     none)
-        xcodebuild -project "${macos}/Ext4.xcodeproj" -scheme Ext4 -configuration Release \
+        xcodebuild -project "${macos}/Ext4.xcodeproj" -scheme Ext4 -configuration Release -derivedDataPath "${work}/DerivedData" \
             -archivePath "${archive}" "${version_settings[@]}" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM= archive -quiet
         app="${archive}/Products/Applications/Ext4.app"
         ;;
     automatic)
-        xcodebuild -project "${macos}/Ext4.xcodeproj" -scheme Ext4 -configuration Release \
+        xcodebuild -project "${macos}/Ext4.xcodeproj" -scheme Ext4 -configuration Release -derivedDataPath "${work}/DerivedData" \
             -archivePath "${archive}" "${version_settings[@]}" DEVELOPMENT_TEAM="${team}" \
             "${provisioning[@]}" archive -quiet
         cat > "${work}/export.plist" <<EOF
@@ -104,7 +107,7 @@ EOF
             mkdir -p "${dir}"
             cp "${profile}" "${dir}/${profile_uuid}.provisionprofile"
         done
-        xcodebuild -project "${macos}/Ext4.xcodeproj" -scheme Ext4 -configuration Release \
+        xcodebuild -project "${macos}/Ext4.xcodeproj" -scheme Ext4 -configuration Release -derivedDataPath "${work}/DerivedData" \
             -archivePath "${archive}" "${version_settings[@]}" DEVELOPMENT_TEAM="${team}" \
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" \
             EXT4_FSMODULE_PROFILE_SPECIFIER="${profile_uuid}" archive -quiet
@@ -227,6 +230,27 @@ elif [[ "${EXT4_REQUIRE_SIGNED:-}" == 1 ]]; then
 elif [[ "${signing}" != none ]]; then
     echo "note: set NOTARY_PROFILE or APPLE_API_KEY_* to notarize; without it, Gatekeeper blocks the pkg on other Macs." >&2
 fi
+
+# LaunchServices registers every Ext4.app the build makes. fskit_agent can
+# then start the module from one of these copies, and RunningBoard refuses
+# that ("Client not authorized"), so the installed module never runs.
+# Unregister the build copies and delete them.
+# Delete first, then unregister: a copy that still exists can be registered
+# again in the meantime.
+lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+# The archive step's copy is gone by now but still registered, so list the
+# known build locations as well as what is on disk.
+copies=(
+    "${work}/DerivedData/Build/Intermediates.noindex/ArchiveIntermediates/Ext4/InstallationBuildProductsLocation/Applications/Ext4.app"
+    "${archive}/Products/Applications/Ext4.app"
+    "${work}/export/Ext4.app"
+    "${root}/Applications/Ext4.app"
+)
+while IFS= read -r copy; do copies+=("${copy}"); done < <(find "${work}" -name Ext4.app -prune 2>/dev/null)
+rm -rf "${archive}" "${work}/export" "${work}/DerivedData" "${root}"
+for copy in "${copies[@]}"; do
+    "${lsregister}" -u "${copy}" 2>/dev/null || true
+done
 
 (cd "${dist}" && shasum -a 256 "$(basename "${output}")" > "$(basename "${output}").sha256")
 echo "==> ${output}"
