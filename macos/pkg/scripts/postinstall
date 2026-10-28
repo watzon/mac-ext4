@@ -1,0 +1,36 @@
+#!/bin/sh
+app="/Applications/Ext4.app"
+/usr/sbin/chown -R root:wheel /Library/Filesystems/ext4.fs 2>/dev/null || true
+# storagekitd (behind Disk Utility and diskutil) caches the formattable file
+# systems; launchd restarts it on demand with the new "Linux ext4" entries.
+/usr/bin/killall storagekitd 2>/dev/null || true
+lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+"$lsregister" -f -R -trusted "$app" 2>/dev/null || true
+
+user="$(/usr/bin/stat -f %Su /dev/console)"
+if [ -n "$user" ] && [ "$user" != "root" ] && [ "$user" != "loginwindow" ]; then
+    uid="$(/usr/bin/id -u "$user")"
+    # The per-user FSKit agent caches the module list by bundle location;
+    # restart it so the new module is found. launchd relaunches it on demand.
+    /bin/launchctl asuser "$uid" /usr/bin/pkill -9 -x fskit_agent 2>/dev/null || true
+    /bin/sleep 2
+    # Finder reads file system names at launch; relaunch it to show "Linux ext4".
+    /bin/launchctl asuser "$uid" /usr/bin/pkill -x Finder 2>/dev/null || true
+    # Mount again the ext volumes that preinstall unmounted, read-only if
+    # they were read-only before.
+    state="/private/var/run/dev.watzon.macext4"
+    if [ -f "$state/remount" ] && [ ! -L "$state/remount" ]; then
+        while read -r dev mode; do
+            [ -n "$dev" ] || continue
+            if [ "$mode" = ro ]; then
+                /usr/local/bin/ext4 mount -r "$dev" || true
+            else
+                /usr/local/bin/ext4 mount "$dev" || true
+            fi
+        done < "$state/remount"
+    fi
+    /bin/rm -rf "$state"
+    # Open the app so the user sees the remaining setup step.
+    /bin/launchctl asuser "$uid" /usr/bin/sudo -u "$user" /usr/bin/open "$app" || true
+fi
+exit 0

@@ -1,0 +1,68 @@
+name: Ext4
+options:
+  bundleIdPrefix: $(EXT4_BUNDLE_PREFIX)
+  deploymentTarget:
+    macOS: "15.4"
+  xcodeVersion: "27.1"
+configs:
+  Debug: debug
+  Release: release
+settings:
+  base:
+    MACOSX_DEPLOYMENT_TARGET: "15.4"
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+    OTHER_LDFLAGS: "$(inherited) -framework FSKit"
+  configFiles:
+    Debug: Config/Base.xcconfig
+    Release: Config/Base.xcconfig
+targets:
+  Ext4:
+    type: application
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - path: Ext4
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: "$(EXT4_BUNDLE_PREFIX)"
+        INFOPLIST_FILE: Ext4/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Ext4/Ext4.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_STRICT_CONCURRENCY: minimal
+    dependencies:
+      - target: Ext4FS
+        embed: true
+        codeSign: true
+  Ext4FS:
+    type: extensionkit-extension
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - path: Ext4FS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: "$(EXT4_BUNDLE_PREFIX).fsmodule"
+        PROVISIONING_PROFILE_SPECIFIER: "$(EXT4_FSMODULE_PROFILE_SPECIFIER)"
+        INFOPLIST_FILE: Ext4FS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Ext4FS/Ext4FS.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_OBJC_BRIDGING_HEADER: "$(PROJECT_DIR)/../crates/ext4-ffi/include/ext4fs.h"
+        HEADER_SEARCH_PATHS: "$(PROJECT_DIR)/../crates/ext4-ffi/include"
+        LIBRARY_SEARCH_PATHS: "$(PROJECT_DIR)/../target/universal/release"
+        OTHER_LDFLAGS: "$(inherited) -framework FSKit -lext4fs"
+        SWIFT_STRICT_CONCURRENCY: minimal
+    preBuildScripts:
+      - name: Build universal Rust FFI library
+        script: '"${PROJECT_DIR}/../scripts/build-rust.sh"'
+        inputFiles:
+          - "$(PROJECT_DIR)/../Cargo.toml"
+          - "$(PROJECT_DIR)/../crates/ext4-ffi/include/ext4fs.h"
+        outputFiles:
+          - "$(PROJECT_DIR)/../target/universal/release/libext4fs.a"

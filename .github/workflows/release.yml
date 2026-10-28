@@ -1,0 +1,173 @@
+name: Release
+
+# Publish a GitHub release for a tag vX.Y.Z as a prerelease. This workflow
+# then builds the installer, signs it, notarizes it, attaches it, and makes
+# the release the latest release. Users see the release only after that last
+# step, so a release without its installer never becomes the latest.
+#
+# To build again for a release that is still a prerelease:
+#   gh workflow run release.yml -f tag=v0.1.0
+# A release that is no longer a prerelease is never changed. Make a new version.
+# docs/releasing.md has the setup and the steps.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag of a release that exists (for example v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  installer:
+    name: Installer
+    runs-on: xcode-27
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout the tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name || inputs.tag }}
+
+      - name: Stop when the release is not a prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$(gh release view "$TAG" --json isPrerelease --jq .isPrerelease)" != "true" ]]; then
+            echo "::error::The release $TAG is not a prerelease, so users already see it. This workflow does not change it. Make a new version."
+            exit 1
+          fi
+
+      - name: Check the tag against the version in Cargo.toml
+        run: |
+          version=$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [[ "$TAG" != "v$version" ]]; then
+            echo "::error::The tag is $TAG, but Cargo.toml has version $version. The tag must be v$version."
+            exit 1
+          fi
+
+      - name: Check the signing secrets
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          missing=0
+          for name in MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::The secret $name is not set. See docs/releasing.md."
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # The .p12 file holds two certificates: Developer ID Application signs
+      # the app, the module, and the command-line tool; Developer ID Installer
+      # signs the pkg.
+      - name: Import the Developer ID certificates
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password=$(openssl rand -hex 24)
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificates.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/certificates.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -f pkcs12 -k "$keychain" \
+            -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/productsign -T /usr/bin/pkgbuild
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain" >/dev/null
+          existing=()
+          while IFS= read -r line; do existing+=("$(echo "$line" | tr -d ' "')"); done < <(security list-keychains -d user)
+          security list-keychains -d user -s "$keychain" "${existing[@]}"
+          rm "$RUNNER_TEMP/certificates.p12"
+          security find-identity -v "$keychain"
+
+      # The API key notarizes the pkg. In automatic signing, it also lets
+      # xcodebuild make the Developer ID provisioning profile of the FSKit
+      # module, which needs the Admin role. With the optional secret
+      # EXT4_FSMODULE_PROFILE (a manually managed Developer ID profile), the
+      # build uses that profile instead.
+      - name: Build, sign, and notarize
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          EXT4_FSMODULE_PROFILE_B64: ${{ secrets.EXT4_FSMODULE_PROFILE }}
+          EXT4_TEAM_ID: ${{ vars.EXT4_TEAM_ID || 'MB5789APU7' }}
+          EXT4_BUILD_NUMBER: ${{ github.run_number }}
+          EXT4_REQUIRE_SIGNED: "1"
+        run: |
+          export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
+          if [[ -n "$EXT4_FSMODULE_PROFILE_B64" ]]; then
+            export EXT4_SIGNING=manual
+            export EXT4_FSMODULE_PROFILE="$RUNNER_TEMP/fsmodule.provisionprofile"
+            echo "$EXT4_FSMODULE_PROFILE_B64" | base64 --decode > "$EXT4_FSMODULE_PROFILE"
+          else
+            export EXT4_SIGNING=automatic
+          fi
+          scripts/package.sh
+
+      - name: Check the signatures and the notarization ticket
+        run: |
+          pkg=$(ls dist/Ext4-*.pkg)
+          pkgutil --check-signature "$pkg"
+          xcrun stapler validate "$pkg"
+          spctl --assess --type install -vv "$pkg"
+
+      - name: Attach the installer to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/Ext4-*.pkg dist/Ext4-*.pkg.sha256 --clobber
+
+      - name: Make the release the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # No latest release is HTTP 404. Any other failure stops the job.
+          if latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>lookup.err); then
+            :
+          elif grep -q "HTTP 404" lookup.err; then
+            latest=""
+          else
+            echo "::error::Could not read the latest release: $(cat lookup.err)"
+            exit 1
+          fi
+          newest=$(printf '%s\n%s\n' "${latest#v}" "${TAG#v}" | sort -V | tail -1)
+          if [[ -z "$latest" || ( "$newest" == "${TAG#v}" && "$latest" != "$TAG" ) ]]; then
+            gh release edit "$TAG" --prerelease=false --latest
+          else
+            echo "::warning::The latest release is $latest, which is not older than $TAG. $TAG becomes a normal release, and $latest stays the latest release."
+            gh release edit "$TAG" --prerelease=false --latest=false
+          fi
+
+      - name: Delete the keychain, the API key, and the profile
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/fsmodule.provisionprofile"

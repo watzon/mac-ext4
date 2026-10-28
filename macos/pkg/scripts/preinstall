@@ -1,0 +1,50 @@
+#!/bin/sh
+# Unmount ext volumes before the module is replaced: macOS stops the old
+# module process when its bundle changes, which would leave a dead mount.
+# postinstall mounts these again once the new module is in place.
+#
+# The list lives in a directory that only root can write (/var/run), so no
+# other user can replace it with a link. Each line is "<disk> rw|ro".
+state="/private/var/run/dev.watzon.macext4"
+/bin/rm -rf "$state"
+/bin/mkdir -m 700 "$state" || exit 1
+remount="$state/remount"
+mounts="$state/mounts"
+: > "$remount"
+/sbin/mount > "$mounts" || exit 1
+
+# Mount again what this script already unmounted, then stop the install.
+abort() {
+    echo "error: $1" >&2
+    while read -r dev mode; do
+        if [ "$mode" = ro ]; then
+            /usr/local/bin/ext4 mount -r "$dev" || true
+        else
+            /usr/local/bin/ext4 mount "$dev" || true
+        fi
+    done < "$remount"
+    /bin/rm -rf "$state"
+    exit 1
+}
+
+while IFS= read -r line; do
+    case "$line" in
+        *"(ext2,"*fskit*|*"(ext3,"*fskit*|*"(ext4,"*fskit*) ;;
+        *) continue ;;
+    esac
+    mnt="${line#* on }"
+    mnt="${mnt% (*}"
+    dev="${line%% on *}"
+    case "$line" in
+        *read-only*) mode=ro ;;
+        *) mode=rw ;;
+    esac
+    echo "Unmounting ${mnt}"
+    if /sbin/umount "$mnt"; then
+        echo "${dev#/dev/} ${mode}" >> "$remount"
+    else
+        abort "could not unmount ${mnt}. Close the files that are open on it, then run the installer again."
+    fi
+done < "$mounts"
+/bin/rm -f "$mounts"
+exit 0

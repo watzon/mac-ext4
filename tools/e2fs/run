@@ -1,0 +1,60 @@
+#!/bin/sh
+# Run an e2fsprogs (or sgdisk) command against files under the repository
+# root. The tests use this as their reference implementation of ext2/3/4.
+#
+#   tools/e2fs/run mke2fs -t ext4 target/img/test.img 64M
+#   tools/e2fs/run --check [tool ...]   exit 0 if the tools can run
+#
+# Paths must be relative to the repository root.
+#
+# With Docker running, the tools come from a Debian image (e2fsprogs 1.47.2,
+# gdisk). Otherwise they come from Homebrew: brew install e2fsprogs gptfdisk.
+# Set E2FS_ORACLE=docker or E2FS_ORACLE=native to choose.
+set -eu
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+image=mac-ext4-e2fs
+
+mode="${E2FS_ORACLE:-}"
+if [ -z "$mode" ]; then
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        mode=docker
+    else
+        mode=native
+    fi
+fi
+
+case "$mode" in
+docker)
+    if [ "${1:-}" = "--check" ]; then
+        docker info >/dev/null 2>&1
+        exit $?
+    fi
+    if ! docker image inspect "$image" >/dev/null 2>&1; then
+        docker build -q -t "$image" "$root/tools/e2fs" >/dev/null
+    fi
+    exec docker run --rm -i -v "$root:/work" -w /work -e E2FSPROGS_FAKE_TIME "$image" "$@"
+    ;;
+native)
+    # Homebrew installs e2fsprogs keg-only, so its tools are not on PATH.
+    for prefix in /opt/homebrew /usr/local; do
+        for dir in "$prefix/opt/e2fsprogs/sbin" "$prefix/opt/e2fsprogs/bin" "$prefix/bin"; do
+            [ -d "$dir" ] && PATH="$dir:$PATH"
+        done
+    done
+    export PATH
+    if [ "${1:-}" = "--check" ]; then
+        shift
+        [ $# -gt 0 ] || set -- mke2fs e2fsck debugfs dumpe2fs
+        for tool in "$@"; do
+            command -v "$tool" >/dev/null 2>&1 || exit 1
+        done
+        exit 0
+    fi
+    cd "$root"
+    exec "$@"
+    ;;
+*)
+    echo "E2FS_ORACLE must be docker or native" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,4 @@
+// This file is intentionally not tracked when named Local.xcconfig.
+// Select the paid Apple Developer team that has the FSKit Module capability.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+EXT4_BUNDLE_PREFIX = dev.watzon.macext4

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"></head>
+<body>
+<h1>One more step: turn on Ext4</h1>
+<p>macOS does not use a new file system module until you turn it on. Ext4.app opens now and shows a button that takes you to the right place in System Settings. Or do it yourself:</p>
+<ol>
+  <li>Open <b>System Settings &gt; General &gt; Login Items &amp; Extensions</b>.</li>
+  <li>Under Extensions, switch the list to <b>By Category</b>.</li>
+  <li>Click <b>ⓘ</b> next to <b>File System Extensions</b> and turn on <b>Ext4</b>.</li>
+</ol>
+<div class="box">The switch in the "By App" list does not respond on current macOS versions. Use the category list.</div>
+<h2>After that</h2>
+<ul>
+  <li>Connect an ext2, ext3, or ext4 drive. It opens in Finder like any other drive.</li>
+  <li>To format a partition as ext4 (this erases it): <code>sudo newfs_fskit -t ext4 -L NAME diskNsM</code>. Find the partition with <code>diskutil list</code>.</li>
+  <li>Eject from Finder, or run <code>ext4 unmount /Volumes/NAME</code>.</li>
+</ul>
+</body></html>

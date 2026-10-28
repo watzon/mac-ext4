@@ -1,0 +1,89 @@
+name: CI
+
+# Runs on pushes to main and on pull requests. A change to documents only
+# (Markdown, the license) runs nothing.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE*'
+      - '.github/ISSUE_TEMPLATE/**'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE*'
+      - '.github/ISSUE_TEMPLATE/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests, clippy, and rustfmt
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The tests compare the engine with e2fsprogs (tools/e2fs/run). macOS
+      # runners have no Docker, so the tools come from Homebrew.
+      # EXT4_REQUIRE_ORACLE makes a test fail instead of skip when they are
+      # missing.
+      - name: Install e2fsprogs and gdisk
+        run: brew install e2fsprogs gptfdisk
+
+      - name: rustfmt
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        env:
+          E2FS_ORACLE: native
+          EXT4_REQUIRE_ORACLE: "1"
+        run: cargo test --workspace
+
+  package:
+    name: App and installer (not signed)
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # The same script as the release, without signatures: CI has no
+      # Developer ID certificate. The pkg cannot run on another Mac, but the
+      # build checks the Swift code, the Xcode project, and the packaging.
+      - name: Build the installer
+        env:
+          EXT4_SIGNING: none
+          EXT4_BUILD_NUMBER: ${{ github.run_number }}
+        run: scripts/package.sh
+
+      - name: Keep the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ext4-pkg-unsigned
+          path: |
+            dist/*.pkg
+            dist/*.pkg.sha256
+          if-no-files-found: error

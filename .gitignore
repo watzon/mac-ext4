@@ -1,0 +1,8 @@
+target/
+macos/build/
+macos/Config/Local.xcconfig
+*.xcodeproj/xcuserdata
+DerivedData
+dist/
+.DS_Store
+macos/Ext4.xcodeproj/

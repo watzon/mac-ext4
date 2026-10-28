@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["crates/ext4-core", "crates/ext4-ffi", "crates/ext4-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.85"
+
+[workspace.dependencies]
+crc32c = "0.6"
+
+[profile.release]
+strip = "debuginfo"

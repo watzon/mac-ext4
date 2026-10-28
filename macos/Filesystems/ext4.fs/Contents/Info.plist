@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  File system bundle for Finder and Disk Utility. FSKit modules are consulted
+  for neither:
+  - Finder's "Format" name (NSURLVolumeLocalizedFormatDescriptionKey) comes
+    from Filesystems/<fstypename>.fs bundles, matched by FSSubType.
+  - Disk Utility's Erase menu lists personalities that declare
+    FSFormatExecutable. Only ext4 declares one, because Disk Utility puts each
+    personality with a distinct type in its own menu section. ext2 and ext3
+    stay available through `ext4 mkfs -t ext3` and `newfs_fskit -t ext3`.
+  Contents/Resources/newfs_ext4 is the ext4 CLI, which acts as a newfs
+  formatter under that name. There are no media types and no mount or check
+  programs: probing, mounting, and checking stay with the FSKit module.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.watzon.macext4.filesystems.ext4</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>ext4</string>
+	<key>CFBundlePackageType</key>
+	<string>fs  </string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>FSPersonalities</key>
+	<dict>
+		<key>ext2</key>
+		<dict>
+			<key>FSName</key>
+			<string>Linux ext2</string>
+			<key>FSSubType</key>
+			<integer>2</integer>
+		</dict>
+		<key>ext3</key>
+		<dict>
+			<key>FSName</key>
+			<string>Linux ext3</string>
+			<key>FSSubType</key>
+			<integer>3</integer>
+		</dict>
+		<key>ext4</key>
+		<dict>
+			<key>FSFormatArguments</key>
+			<string>-t ext4</string>
+			<key>FSFormatContentMask</key>
+			<string>0FC63DAF-8483-4772-8E79-3D69D8477DE4</string>
+			<key>FSFormatExecutable</key>
+			<string>newfs_ext4</string>
+			<key>FSFormatMaximumSize</key>
+			<integer>1152921504606846976</integer>
+			<key>FSFormatMinimumSize</key>
+			<integer>8388608</integer>
+			<key>FSName</key>
+			<string>Linux ext4</string>
+			<key>FSSubType</key>
+			<integer>4</integer>
+		</dict>
+	</dict>
+</dict>
+</plist>

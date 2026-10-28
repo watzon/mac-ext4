@@ -1,0 +1,17 @@
+// Copy Local.xcconfig.example to Local.xcconfig and provide your signing team.
+DEVELOPMENT_TEAM =
+EXT4_BUNDLE_PREFIX = dev.watzon.macext4
+
+// scripts/package.sh sets these from Cargo.toml and the build number.
+MARKETING_VERSION = 0.0.0
+CURRENT_PROJECT_VERSION = 1
+
+// Manual signing (CI) names the Developer ID provisioning profile of the
+// FSKit module here. Automatic signing leaves it empty.
+EXT4_FSMODULE_PROFILE_SPECIFIER =
+
+#include? "Local.xcconfig"
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development
+ENABLE_HARDENED_RUNTIME = YES
+MACOSX_DEPLOYMENT_TARGET = 15.4

@@ -1,0 +1,14 @@
+[package]
+name = "ext4-ffi"
+description = "C ABI over ext4-core for the macOS FSKit extension (see include/ext4fs.h)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "ext4fs"
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+ext4-core = { path = "../ext4-core" }

@@ -1,0 +1,12 @@
+[package]
+name = "ext4-core"
+description = "Platform-independent ext2/ext3/ext4 on-disk format engine (read, write, journal, mkfs, check)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+crc32c.workspace = true
+
+[dev-dependencies]

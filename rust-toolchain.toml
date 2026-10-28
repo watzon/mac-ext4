@@ -1,0 +1,5 @@
+[toolchain]
+channel = "1.94.1"
+components = ["clippy", "rustfmt"]
+# The FSKit module links a universal static library (scripts/build-rust.sh).
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]

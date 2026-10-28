@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Ext4 File System</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Ext4FS</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>EXAppExtensionAttributes</key>
+	<dict>
+		<key>EXExtensionPointIdentifier</key>
+		<string>com.apple.fskit.fsmodule</string>
+		<key>FSActivateOptionSyntax</key>
+		<dict>
+			<key>shortOptions</key>
+			<string>fo:</string>
+		</dict>
+		<key>FSCheckOptionSyntax</key>
+		<dict>
+			<key>shortOptions</key>
+			<string>fnpqy</string>
+		</dict>
+		<key>FSFormatOptionSyntax</key>
+		<dict>
+			<key>shortOptions</key>
+			<string>L:b:I:i:m:t:</string>
+		</dict>
+		<key>FSMediaTypes</key>
+		<dict>
+			<key>0FC63DAF-8483-4772-8E79-3D69D8477DE4</key>
+			<dict>
+				<key>FSMediaProperties</key>
+				<dict>
+					<key>Content Hint</key>
+					<string>0FC63DAF-8483-4772-8E79-3D69D8477DE4</string>
+					<key>Leaf</key>
+					<true/>
+				</dict>
+				<key>FSProbeOrder</key>
+				<integer>500</integer>
+			</dict>
+			<key>EBD0A0A2-B9E5-4433-87C0-68B6B72699C7</key>
+			<dict>
+				<key>FSMediaProperties</key>
+				<dict>
+					<key>Content Hint</key>
+					<string>EBD0A0A2-B9E5-4433-87C0-68B6B72699C7</string>
+					<key>Leaf</key>
+					<true/>
+				</dict>
+				<key>FSProbeOrder</key>
+				<integer>500</integer>
+			</dict>
+			<key>Linux</key>
+			<dict>
+				<key>FSMediaProperties</key>
+				<dict>
+					<key>Content Hint</key>
+					<string>Linux</string>
+					<key>Leaf</key>
+					<true/>
+				</dict>
+				<key>FSProbeOrder</key>
+				<integer>500</integer>
+			</dict>
+		</dict>
+		<key>FSPersonalities</key>
+		<dict>
+			<key>ext2</key>
+			<dict>
+				<key>FSFormatArguments</key>
+				<string>-t ext2</string>
+				<key>FSFormatContentMask</key>
+				<string>0FC63DAF-8483-4772-8E79-3D69D8477DE4</string>
+				<key>FSFormatMinimumSize</key>
+				<integer>1048576</integer>
+				<key>FSName</key>
+				<string>Linux ext2</string>
+				<key>FSSubType</key>
+				<integer>2</integer>
+			</dict>
+			<key>ext3</key>
+			<dict>
+				<key>FSFormatArguments</key>
+				<string>-t ext3</string>
+				<key>FSFormatContentMask</key>
+				<string>0FC63DAF-8483-4772-8E79-3D69D8477DE4</string>
+				<key>FSFormatMinimumSize</key>
+				<integer>8388608</integer>
+				<key>FSName</key>
+				<string>Linux ext3</string>
+				<key>FSSubType</key>
+				<integer>3</integer>
+			</dict>
+			<key>ext4</key>
+			<dict>
+				<key>FSFormatArguments</key>
+				<string>-t ext4</string>
+				<key>FSFormatContentMask</key>
+				<string>0FC63DAF-8483-4772-8E79-3D69D8477DE4</string>
+				<key>FSFormatMinimumSize</key>
+				<integer>8388608</integer>
+				<key>FSName</key>
+				<string>Linux ext4</string>
+				<key>FSSubType</key>
+				<integer>4</integer>
+			</dict>
+		</dict>
+		<key>FSRequiresSecurityScopedPathURLResources</key>
+		<false/>
+		<key>FSShortName</key>
+		<string>ext4</string>
+		<key>FSSupportsBlockResources</key>
+		<true/>
+		<key>FSSupportsGenericURLResources</key>
+		<false/>
+		<key>FSSupportsPathURLs</key>
+		<false/>
+		<key>FSSupportsServerURLs</key>
+		<false/>
+	</dict>
+</dict>
+</plist>
