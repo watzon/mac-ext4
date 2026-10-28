@@ -71,7 +71,13 @@ enum CommandName {
     Mount {
         #[arg(short = 'r', long)]
         read_only: bool,
-        disk: String,
+        /// Mount every unmounted partition of type "Linux filesystem".
+        /// At login this mounts the disks that macOS could not mount at
+        /// startup, before any user had the FSKit module enabled.
+        #[arg(long, conflicts_with_all = ["disk", "mountpoint"])]
+        all: bool,
+        #[arg(required_unless_present = "all")]
+        disk: Option<String>,
         mountpoint: Option<PathBuf>,
     },
     /// Unmount a volume by disk name or mount point (no sudo needed).
@@ -222,9 +228,19 @@ fn run(command: CommandName) -> CliResult<()> {
         } => check_command(&dev, repair, quick),
         CommandName::Mount {
             read_only,
+            all: true,
+            ..
+        } => mount_all(read_only),
+        CommandName::Mount {
+            read_only,
             disk,
             mountpoint,
-        } => mount(&disk, mountpoint.as_deref(), read_only),
+            ..
+        } => mount(
+            disk.as_deref().expect("clap requires a disk without --all"),
+            mountpoint.as_deref(),
+            read_only,
+        ),
         CommandName::Unmount { force, target } => unmount(&target, force),
         CommandName::Ls { long, dev, path } => with_filesystem(&dev, false, |fs| {
             ls(fs, path.as_deref().unwrap_or("/"), long)
@@ -552,6 +568,41 @@ const ENABLE_HINT: &str =
     "Confirm that Ext4 is enabled: System Settings > General > Login Items & Extensions, \
 list 'By Category', (i) next to File System Extensions. Check registration with \
 `pluginkit -m -p com.apple.fskit.fsmodule -v`.";
+
+/// Mount each unmounted "Linux Filesystem" partition through Disk
+/// Arbitration. Failures are reported and do not stop the others.
+fn mount_all(read_only: bool) -> CliResult<()> {
+    let output = Command::new("diskutil").args(["list", "-plist"]).output()?;
+    if !output.status.success() {
+        return Err("diskutil list failed".into());
+    }
+    let mut failed = 0;
+    for name in plist_values(&String::from_utf8_lossy(&output.stdout), "DeviceIdentifier") {
+        if split_partition(&name).is_none() {
+            continue;
+        }
+        let info = Command::new("diskutil")
+            .args(["info", "-plist", &name])
+            .output()?;
+        let text = String::from_utf8_lossy(&info.stdout);
+        let linux = plist_values(&text, "Content")
+            .iter()
+            .any(|c| c == "Linux Filesystem");
+        let mounted = plist_values(&text, "MountPoint")
+            .iter()
+            .any(|m| !m.is_empty());
+        if linux && !mounted {
+            if let Err(error) = mount(&name, None, read_only) {
+                eprintln!("ext4: {name}: {error}");
+                failed += 1;
+            }
+        }
+    }
+    if failed > 0 {
+        return Err(format!("{failed} partition(s) did not mount").into());
+    }
+    Ok(())
+}
 
 fn mount(disk: &str, mountpoint: Option<&Path>, read_only: bool) -> CliResult<()> {
     let Some(mountpoint) = mountpoint else {

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+At startup, before anyone logs in, macOS cannot use FSKit modules (the user
+enables them), so ext partitions stay unmounted and show as unreadable.
+Mount them when the user logs in. Disks connected later mount as usual.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.watzon.macext4.mount</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>sleep 5; exec /usr/local/bin/ext4 mount --all</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

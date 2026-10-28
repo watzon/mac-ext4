@@ -30,6 +30,10 @@ if [ -n "$user" ] && [ "$user" != "root" ] && [ "$user" != "loginwindow" ]; then
         done < "$state/remount"
     fi
     /bin/rm -rf "$state"
+    # Load the login agent that mounts ext partitions macOS skipped at startup.
+    agent=/Library/LaunchAgents/dev.watzon.macext4.mount.plist
+    /bin/launchctl bootout "gui/$uid" "$agent" 2>/dev/null || true
+    /bin/launchctl bootstrap "gui/$uid" "$agent" 2>/dev/null || true
     # Open the app so the user sees the remaining setup step.
     /bin/launchctl asuser "$uid" /usr/bin/sudo -u "$user" /usr/bin/open "$app" || true
 fi

@@ -153,7 +153,7 @@ sign "${cli}"
 
 echo "==> Staging the payload"
 root="${work}/root"
-mkdir -p "${root}/Applications" "${root}/Library/Filesystems" "${root}/usr/local/bin"
+mkdir -p "${root}/Applications" "${root}/Library/Filesystems" "${root}/Library/LaunchAgents" "${root}/usr/local/bin"
 ditto "${app}" "${root}/Applications/Ext4.app"
 ditto "${macos}/Filesystems/ext4.fs" "${root}/Library/Filesystems/ext4.fs"
 # Disk Utility's formatter: the CLI acts as newfs when named newfs_ext4.
@@ -163,6 +163,7 @@ install -m 0755 "${cli}" "${root}/Library/Filesystems/ext4.fs/Contents/Resources
     "${root}/Library/Filesystems/ext4.fs/Contents/Info.plist"
 sign "${root}/Library/Filesystems/ext4.fs"
 install -m 0755 "${cli}" "${root}/usr/local/bin/ext4"
+install -m 0644 "${macos}/pkg/LaunchAgents/dev.watzon.macext4.mount.plist" "${root}/Library/LaunchAgents/"
 
 # Without this, Installer may "relocate" the app to any other copy with the
 # same bundle ID it finds (for example a development build) instead of
@@ -172,6 +173,11 @@ i=0
 while /usr/libexec/PlistBuddy -c "Print :${i}" "${work}/component.plist" >/dev/null 2>&1; do
     /usr/libexec/PlistBuddy -c "Delete :${i}:BundleIsRelocatable" "${work}/component.plist" 2>/dev/null || true
     /usr/libexec/PlistBuddy -c "Add :${i}:BundleIsRelocatable bool false" "${work}/component.plist"
+    # Always replace the bundles: the app, the module, and the formatter
+    # must match. With version checks, Installer keeps an installed bundle
+    # whose version looks newer, and the install silently does nothing.
+    /usr/libexec/PlistBuddy -c "Delete :${i}:BundleIsVersionChecked" "${work}/component.plist" 2>/dev/null || true
+    /usr/libexec/PlistBuddy -c "Add :${i}:BundleIsVersionChecked bool false" "${work}/component.plist"
     i=$((i + 1))
 done
 

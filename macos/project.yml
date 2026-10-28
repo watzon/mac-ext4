@@ -61,8 +61,8 @@ targets:
     preBuildScripts:
       - name: Build universal Rust FFI library
         script: '"${PROJECT_DIR}/../scripts/build-rust.sh"'
-        inputFiles:
-          - "$(PROJECT_DIR)/../Cargo.toml"
-          - "$(PROJECT_DIR)/../crates/ext4-ffi/include/ext4fs.h"
+        # Run on every build: cargo rebuilds only what changed, and Xcode
+        # cannot see Rust source changes, so input checks link stale code.
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(PROJECT_DIR)/../target/universal/release/libext4fs.a"

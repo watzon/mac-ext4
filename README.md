@@ -39,8 +39,10 @@ The installer puts these items on your Mac:
 - `/Library/Filesystems/ext4.fs`, which gives Finder and Disk Utility the
   format names and the formatter
 - `/usr/local/bin/ext4`, the command-line tool
+- `/Library/LaunchAgents/dev.watzon.macext4.mount.plist`, which mounts ext
+  disks at login (see below)
 
-To remove mac-ext4, delete the three items, then restart the Mac.
+To remove mac-ext4, delete these items, then restart the Mac.
 
 ## Usage
 
@@ -51,6 +53,12 @@ Connect the disk. macOS checks the file system and mounts it at
 journal first, as `fsck -p` does on Linux.
 
 Eject the disk in Finder before you disconnect it.
+
+When the Mac starts with an ext disk connected, macOS cannot mount it until
+you log in, because you turn on the module for your user account. The login
+agent then runs `ext4 mount --all`, which mounts every unmounted partition of
+type "Linux filesystem". Until then, macOS can show the disk as unreadable;
+ignore that message.
 
 From Terminal (no `sudo` needed):
 

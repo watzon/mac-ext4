@@ -4,6 +4,13 @@ set -euo pipefail
 app_destination="/Applications/Ext4.app"
 extension_path="${app_destination}/Contents/Extensions/Ext4FS.appex"
 fs_bundle="/Library/Filesystems/ext4.fs"
+agent="/Library/LaunchAgents/dev.watzon.macext4.mount.plist"
+
+if [[ -f "${agent}" ]]; then
+    launchctl bootout "gui/$(id -u)" "${agent}" 2>/dev/null || true
+    echo "Removing ${agent} requires administrator authorization."
+    sudo /bin/rm -f "${agent}"
+fi
 
 if [[ -d "${extension_path}" ]]; then
     pluginkit -r "${extension_path}" || echo "warning: pluginkit could not unregister the extension; it may already be unregistered." >&2
