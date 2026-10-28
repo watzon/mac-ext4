@@ -64,12 +64,13 @@ jobs:
           MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           MACOS_INSTALLER_CERTIFICATE_P12: ${{ secrets.MACOS_INSTALLER_CERTIFICATE_P12 }}
+          EXT4_FSMODULE_PROFILE: ${{ secrets.EXT4_FSMODULE_PROFILE }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
           missing=0
-          for name in MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD MACOS_INSTALLER_CERTIFICATE_P12 APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER_ID; do
+          for name in MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD MACOS_INSTALLER_CERTIFICATE_P12 EXT4_FSMODULE_PROFILE APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER_ID; do
             if [[ -z "${!name}" ]]; then
               echo "::error::The secret $name is not set. See docs/releasing.md."
               missing=1
@@ -116,11 +117,9 @@ jobs:
           security list-keychains -d user -s "$keychain" "${existing[@]}"
           security find-identity -v "$keychain"
 
-      # The API key notarizes the pkg. In automatic signing, it also lets
-      # xcodebuild make the Developer ID provisioning profile of the FSKit
-      # module, which needs the Admin role. With the optional secret
-      # EXT4_FSMODULE_PROFILE (a manually managed Developer ID profile), the
-      # build uses that profile instead.
+      # The FSKit module needs its Developer ID provisioning profile
+      # (EXT4_FSMODULE_PROFILE), so the build signs manually and Xcode
+      # changes nothing in the developer account. The API key notarizes.
       - name: Build, sign, and notarize
         env:
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
@@ -130,16 +129,12 @@ jobs:
           EXT4_TEAM_ID: ${{ vars.EXT4_TEAM_ID || 'MB5789APU7' }}
           EXT4_BUILD_NUMBER: ${{ github.run_number }}
           EXT4_REQUIRE_SIGNED: "1"
+          EXT4_SIGNING: manual
         run: |
           export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
           printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
-          if [[ -n "$EXT4_FSMODULE_PROFILE_B64" ]]; then
-            export EXT4_SIGNING=manual
-            export EXT4_FSMODULE_PROFILE="$RUNNER_TEMP/fsmodule.provisionprofile"
-            echo "$EXT4_FSMODULE_PROFILE_B64" | base64 --decode > "$EXT4_FSMODULE_PROFILE"
-          else
-            export EXT4_SIGNING=automatic
-          fi
+          export EXT4_FSMODULE_PROFILE="$RUNNER_TEMP/fsmodule.provisionprofile"
+          echo "$EXT4_FSMODULE_PROFILE_B64" | base64 --decode > "$EXT4_FSMODULE_PROFILE"
           scripts/package.sh
 
       - name: Check the signatures and the notarization ticket

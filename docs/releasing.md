@@ -6,7 +6,7 @@ signs, and notarizes the installer and attaches it to the release.
 
 ## One-time setup
 
-The workflow needs six repository secrets. Two more are optional.
+The workflow needs seven repository secrets. One more is optional.
 
 | Secret | Contents |
 |---|---|
@@ -17,7 +17,7 @@ The workflow needs six repository secrets. Two more are optional.
 | `APPLE_API_KEY_P8` | An App Store Connect API key (`AuthKey_XXXX.p8`) |
 | `APPLE_API_KEY_ID` | The key ID of that key |
 | `APPLE_API_ISSUER_ID` | The issuer ID of the App Store Connect team |
-| `EXT4_FSMODULE_PROFILE` | Optional. A Developer ID provisioning profile of the FSKit module, in base64 |
+| `EXT4_FSMODULE_PROFILE` | The Developer ID provisioning profile of the FSKit module, in base64 |
 
 To get the files:
 
@@ -27,22 +27,23 @@ To get the files:
    each certificate (with its private key) to its own `.p12` file. Only the
    Account Holder can make a Developer ID Installer certificate.
 2. **API key.** In App Store Connect, open Users and Access > Integrations >
-   App Store Connect API and make a team key. The key needs the **Admin**
-   role if the workflow must make the provisioning profile itself (see the
-   next step). The **Developer** role is sufficient for notarization only.
-   Apple lets you download the `.p8` file one time.
-3. **Provisioning profile (optional).** The FSKit module has a restricted
-   entitlement (`com.apple.developer.fskit.fsmodule`), so it needs a
-   provisioning profile. Without `EXT4_FSMODULE_PROFILE`, xcodebuild makes a
-   Developer ID profile with the Admin API key. To use your own profile, make
-   one in the developer portal (Certificates, Identifiers & Profiles >
-   Profiles > Developer ID, App ID `dev.watzon.macext4.fsmodule`, with the
-   FSKit Module capability) and download it.
+   App Store Connect API and make a team key. The workflow uses it only to
+   notarize, so the **Developer** role is sufficient. Apple lets you download
+   the `.p8` file one time.
+3. **Provisioning profile.** The FSKit module has a restricted entitlement
+   (`com.apple.developer.fskit.fsmodule`), so it needs a provisioning
+   profile. In the developer portal, open Certificates, Identifiers &
+   Profiles > Profiles > **+** > **Developer ID**, select the App ID
+   `dev.watzon.macext4.fsmodule` and the **same** Developer ID Application
+   certificate as in `MACOS_CERTIFICATE_P12`, and download the profile.
+   The workflow signs manually with it, so Xcode never changes the developer
+   account from CI. (Automatic signing on a runner would make a new
+   certificate on each run, and the runner deletes its private key.)
 
 Then store the secrets with:
 
 ```sh
-scripts/set-release-secrets.sh application.p12 installer.p12 AuthKey_XXXX.p8 <key id> <issuer id> [profile]
+scripts/set-release-secrets.sh application.p12 installer.p12 AuthKey_XXXX.p8 <key id> <issuer id> macext4.provisionprofile
 ```
 
 The script checks the files and the password before it sends anything to

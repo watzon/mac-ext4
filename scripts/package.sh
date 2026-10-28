@@ -7,12 +7,14 @@
 #
 # Signing, chosen with EXT4_SIGNING:
 #   automatic  (default) Developer ID, with the provisioning profile that Xcode
-#              makes and keeps current. Xcode must be signed in to the team,
-#              or APPLE_API_KEY_* must name an App Store Connect API key with
-#              the Admin role (the release workflow uses this).
+#              makes and keeps current. Xcode must be signed in to the team.
+#              Use this on your own Mac only: on a CI runner, Xcode makes a
+#              new signing certificate each time and the runner deletes its
+#              private key.
 #   manual     Developer ID, with the provisioning profile file named by
 #              EXT4_FSMODULE_PROFILE. The profile must be a manually managed
-#              Developer ID profile from the developer portal.
+#              Developer ID profile from the developer portal. The release
+#              workflow uses this; Xcode changes nothing in the account.
 #   none       No signatures at all, for CI checks of the packaging. The
 #              package cannot run on another Mac.
 #
@@ -58,12 +60,9 @@ xcodegen_bin="$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)"
 "${xcodegen_bin}" generate --spec "${macos}/project.yml" --project "${macos}" >/dev/null
 
 version_settings=(MARKETING_VERSION="${version}" CURRENT_PROJECT_VERSION="${build_number}")
-# With an API key, xcodebuild manages profiles without a signed-in Xcode.
+# Only automatic signing may let Xcode change the account (profiles,
+# certificates), and only through the Xcode account on this Mac.
 provisioning=(-allowProvisioningUpdates)
-if [[ -n "${APPLE_API_KEY_PATH:-}" ]]; then
-    provisioning+=(-authenticationKeyPath "${APPLE_API_KEY_PATH}" -authenticationKeyID "${APPLE_API_KEY_ID:?}"
-        -authenticationKeyIssuerID "${APPLE_API_ISSUER_ID:?}")
-fi
 archive="${work}/Ext4.xcarchive"
 
 echo "==> Building Ext4 ${version} (${build_number}), signing: ${signing}"
