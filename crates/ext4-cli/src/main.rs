@@ -609,6 +609,10 @@ fn mount(disk: &str, mountpoint: Option<&Path>, read_only: bool) -> CliResult<()
         // Disk Arbitration checks the volume, mounts it under /Volumes, and
         // lets the console user eject it later, all without sudo.
         let bsd = bsd_name(disk);
+        if let Some(m) = mount_point_of(&bsd) {
+            println!("already mounted at {m}");
+            return Ok(());
+        }
         // Right after an FSKit volume unmounts, Disk Arbitration's next probe
         // can fail while the old module instance is still shutting down, and
         // the disk is then reported "unsupported". A second request re-probes.
