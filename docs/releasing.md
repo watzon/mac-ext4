@@ -6,12 +6,14 @@ signs, and notarizes the installer and attaches it to the release.
 
 ## One-time setup
 
-The workflow needs five repository secrets. One more is optional.
+The workflow needs six repository secrets. Two more are optional.
 
 | Secret | Contents |
 |---|---|
-| `MACOS_CERTIFICATE_P12` | A `.p12` file, in base64, with the **Developer ID Application** and the **Developer ID Installer** certificates and their private keys |
-| `MACOS_CERTIFICATE_PASSWORD` | The password of that `.p12` file |
+| `MACOS_CERTIFICATE_P12` | A `.p12` file, in base64, with the **Developer ID Application** certificate and its private key |
+| `MACOS_INSTALLER_CERTIFICATE_P12` | A `.p12` file, in base64, with the **Developer ID Installer** certificate and its private key |
+| `MACOS_CERTIFICATE_PASSWORD` | The password of the `.p12` files |
+| `MACOS_INSTALLER_CERTIFICATE_PASSWORD` | Optional. The password of the installer `.p12` file, if it is different |
 | `APPLE_API_KEY_P8` | An App Store Connect API key (`AuthKey_XXXX.p8`) |
 | `APPLE_API_KEY_ID` | The key ID of that key |
 | `APPLE_API_ISSUER_ID` | The issuer ID of the App Store Connect team |
@@ -21,8 +23,9 @@ To get the files:
 
 1. **Certificates.** In Xcode, open Settings > Accounts > Manage Certificates.
    Add a Developer ID Application and a Developer ID Installer certificate if
-   you do not have them. Then, in Keychain Access, select both certificates
-   and export them into one `.p12` file.
+   you do not have them. Then, in Keychain Access > My Certificates, export
+   each certificate (with its private key) to its own `.p12` file. Only the
+   Account Holder can make a Developer ID Installer certificate.
 2. **API key.** In App Store Connect, open Users and Access > Integrations >
    App Store Connect API and make a team key. The key needs the **Admin**
    role if the workflow must make the provisioning profile itself (see the
@@ -39,7 +42,7 @@ To get the files:
 Then store the secrets with:
 
 ```sh
-scripts/set-release-secrets.sh certificates.p12 AuthKey_XXXX.p8 <key id> <issuer id> [profile]
+scripts/set-release-secrets.sh application.p12 installer.p12 AuthKey_XXXX.p8 <key id> <issuer id> [profile]
 ```
 
 The script checks the files and the password before it sends anything to
