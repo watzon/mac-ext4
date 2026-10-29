@@ -160,6 +160,69 @@ fn abi_round_trip() {
         );
         assert_eq!(&back[..n], data);
 
+        // Kernel-offloaded write: map past EOF, put the data on the device
+        // at the mapped offset, complete, and read it back.
+        assert!(a.kernel_io, "extent files use kernel-offloaded I/O");
+        let more = [7u8; 8192];
+        let mut extents = [ext4fs_extent::default(); 8];
+        let mut count = 0usize;
+        assert_eq!(
+            ext4fs_blockmap(
+                vol,
+                a.ino,
+                4096,
+                more.len() as u64,
+                true,
+                extents.as_mut_ptr(),
+                8,
+                &mut count
+            ),
+            0
+        );
+        assert!(count >= 1);
+        assert_eq!(extents[0].logical, 4096);
+        assert_eq!(extents[0].kind, EXTENT_UNWRITTEN);
+        file.write_all_at(&more, extents[0].physical).unwrap();
+        assert_eq!(
+            ext4fs_complete_write(vol, a.ino, 4096, more.len() as u64),
+            0
+        );
+        let mut big = vec![0u8; 4096 + more.len()];
+        assert_eq!(
+            ext4fs_read(vol, a.ino, 0, big.as_mut_ptr().cast(), big.len(), &mut n),
+            0
+        );
+        assert_eq!(n, big.len());
+        assert!(big[data.len()..4096].iter().all(|&b| b == 0));
+        assert_eq!(&big[4096..], &more[..]);
+        assert_eq!(
+            ext4fs_blockmap(
+                vol,
+                a.ino,
+                0,
+                big.len() as u64,
+                false,
+                extents.as_mut_ptr(),
+                8,
+                &mut count
+            ),
+            0
+        );
+        // 1 KiB blocks: block 0 holds the first write, then a hole up to
+        // the kernel-written range.
+        let got: Vec<_> = extents[..count]
+            .iter()
+            .map(|e| (e.logical, e.length, e.kind))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                (0, 1024, EXTENT_DATA),
+                (1024, 3072, EXTENT_HOLE),
+                (4096, more.len() as u64, EXTENT_DATA)
+            ]
+        );
+
         // Duplicate create fails with EEXIST.
         assert_eq!(
             ext4fs_create(vol, 2, name.as_ptr(), name.len(), 0o100644, 0, 0, 0, &mut a),

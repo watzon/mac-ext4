@@ -85,6 +85,12 @@ diskutil eraseVolume ext4 DATA disk4s2      # one partition
 Both commands erase all data on the target. Use `diskutil list` to make sure
 that you have the correct disk.
 
+Disk Utility and `diskutil` also add a small (134 MB) "Boot OS X" partition
+after the ext4 partition. macOS does this for every format except its own
+and the Windows formats, and it cannot be turned off. The partition is
+harmless. To get a disk with only the ext4 partition, partition it with
+another tool and format the partition with `sudo ext4 mkfs`.
+
 For ext2 or ext3, or to set the block size or the inode size, use the
 command-line tool:
 
@@ -139,9 +145,11 @@ Not supported: fast-commit journals that need replay.
 
 ## Limitations
 
-- Speed. File data goes through FSKit read and write calls. FSKit can
-  also give the kernel direct access to the blocks, which is faster.
-  mac-ext4 does not use that yet.
+- Speed with many small files. Large files move at the speed of the disk
+  (the kernel moves file data directly), but each new file costs a few
+  round trips to the module. Copying a folder of many small files with
+  Finder is several times slower than on APFS. `ditto` or `cp -R` is
+  about twice as fast as Finder for such folders.
 - Write cache. FSKit has no call that flushes the write cache of the
   disk. If the power fails, a disk with a volatile write cache can write
   blocks in a different order than mac-ext4 sent them. The journal

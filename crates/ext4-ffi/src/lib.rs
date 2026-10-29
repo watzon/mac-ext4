@@ -14,6 +14,7 @@ use std::time::Duration;
 use ext4_core::check::{check, CheckOptions};
 use ext4_core::fs::{Attr, StatFs};
 use ext4_core::inode::{Timestamp, FL_APPEND, FL_IMMUTABLE, FL_NODUMP};
+use ext4_core::koio::IoKind;
 use ext4_core::mkfs::{format, MkfsOptions, Revision};
 use ext4_core::ops::SetAttr;
 use ext4_core::{BlockDevice, Error, Filesystem, MountOptions};
@@ -394,6 +395,7 @@ pub struct ext4fs_attr {
     pub rdev: u32,
     pub generation: u32,
     pub has_btime: bool,
+    pub kernel_io: bool,
     pub atime: ext4fs_timespec,
     pub mtime: ext4fs_timespec,
     pub ctime: ext4fs_timespec,
@@ -414,6 +416,7 @@ fn fill_attr(a: &Attr) -> ext4fs_attr {
         rdev: makedev(a.rdev.0, a.rdev.1),
         generation: a.generation,
         has_btime: a.crtime.is_some(),
+        kernel_io: a.kernel_io,
         atime: a.atime.into(),
         mtime: a.mtime.into(),
         ctime: a.ctime.into(),
@@ -662,6 +665,76 @@ pub unsafe extern "C" fn ext4fs_write(
             *written_out = n;
         }
         Ok(())
+    })
+}
+
+// ---- kernel-offloaded I/O ---------------------------------------------
+
+pub const EXTENT_DATA: u8 = 0;
+pub const EXTENT_HOLE: u8 = 1;
+pub const EXTENT_UNWRITTEN: u8 = 2;
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct ext4fs_extent {
+    pub logical: u64,
+    pub physical: u64,
+    pub length: u64,
+    pub kind: u8,
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ext4fs_blockmap(
+    vol: *mut ext4fs_volume,
+    ino: u64,
+    offset: u64,
+    length: u64,
+    write: bool,
+    out: *mut ext4fs_extent,
+    cap: usize,
+    count_out: *mut usize,
+) -> i32 {
+    guard(|| {
+        let fs = vol_ref(vol)?;
+        if out.is_null() || cap == 0 || count_out.is_null() {
+            return Err(EINVAL);
+        }
+        let ino = ino32(ino)?;
+        let runs = if write {
+            fs.map_for_write(ino, offset, length, cap)
+        } else {
+            fs.map_for_read(ino, offset, length, cap)
+        }
+        .map_err(code)?;
+        let out = std::slice::from_raw_parts_mut(out, cap);
+        for (slot, r) in out.iter_mut().zip(&runs) {
+            *slot = ext4fs_extent {
+                logical: r.logical,
+                physical: r.physical,
+                length: r.len,
+                kind: match r.kind {
+                    IoKind::Data => EXTENT_DATA,
+                    IoKind::Hole => EXTENT_HOLE,
+                    IoKind::Unwritten => EXTENT_UNWRITTEN,
+                },
+            };
+        }
+        *count_out = runs.len().min(cap);
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ext4fs_complete_write(
+    vol: *mut ext4fs_volume,
+    ino: u64,
+    offset: u64,
+    length: u64,
+) -> i32 {
+    guard(|| {
+        vol_ref(vol)?
+            .complete_kernel_write(ino32(ino)?, offset, length)
+            .map_err(code)
     })
 }
 

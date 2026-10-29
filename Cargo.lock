@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "ext4-cli"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "clap",
  "ext4-core",
@@ -117,14 +117,14 @@ dependencies = [
 
 [[package]]
 name = "ext4-core"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "crc32c",
 ]
 
 [[package]]
 name = "ext4-ffi"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "ext4-core",
 ]

@@ -50,9 +50,7 @@
 			<key>FSFormatArguments</key>
 			<string>-t ext4</string>
 			<!-- MediaKit's name for the GPT "Linux filesystem" type
-			     (0FC63DAF-8483-4772-8E79-3D69D8477DE4). With the GUID or
-			     "Linux Filesystem" here, Disk Utility also carves an
-			     Apple_Boot "Boot OS X" partition out of the target. -->
+			     (0FC63DAF-8483-4772-8E79-3D69D8477DE4). -->
 			<key>FSFormatContentMask</key>
 			<string>Linux</string>
 			<key>FSFormatExecutable</key>

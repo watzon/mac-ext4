@@ -11,6 +11,7 @@ use crate::device::BlockDevice;
 use crate::dir::{DirEntry, NAME_MAX};
 use crate::error::{Error, Result};
 use crate::inode::*;
+use crate::koio::IoRun;
 use crate::ops::SetAttr;
 use crate::superblock::STATE_ERROR;
 use crate::volume::{MountOptions, RecoveryReport, Volume};
@@ -37,6 +38,8 @@ pub struct Attr {
     pub flags: u32,
     pub rdev: (u32, u32),
     pub generation: u32,
+    /// The kernel may do this file's data I/O (see `koio`).
+    pub kernel_io: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -218,6 +221,7 @@ impl Filesystem {
             flags: inode.flags(),
             rdev,
             generation: inode.generation(),
+            kernel_io: crate::koio::kernel_io_eligible(inode, v.is_read_only()),
         })
     }
 
@@ -334,6 +338,42 @@ impl Filesystem {
     /// if a later one fails after earlier ones succeeded, the bytes written
     /// so far are returned (a short write) and the error is dropped. The
     /// error is returned only when nothing was written.
+    /// Map bytes of `ino` for kernel-offloaded reads (see `koio`).
+    pub fn map_for_read(
+        &self,
+        ino: u32,
+        offset: u64,
+        len: u64,
+        max_runs: usize,
+    ) -> Result<Vec<IoRun>> {
+        {
+            let v = self.r();
+            if !v.has_inline_data(ino)? || v.is_read_only() {
+                return v.map_for_read(ino, offset, len, max_runs);
+            }
+        }
+        // Inline data has no blocks to map: move it out first.
+        self.mutate(|v| v.move_inline_data_out(ino))?;
+        self.r().map_for_read(ino, offset, len, max_runs)
+    }
+
+    /// Map bytes of `ino` for kernel-offloaded writes, allocating unwritten
+    /// blocks for holes (see `koio`).
+    pub fn map_for_write(
+        &self,
+        ino: u32,
+        offset: u64,
+        len: u64,
+        max_runs: usize,
+    ) -> Result<Vec<IoRun>> {
+        self.mutate(|v| v.map_for_write(ino, offset, len, max_runs))
+    }
+
+    /// The kernel finished writing bytes of `ino` (see `koio`).
+    pub fn complete_kernel_write(&self, ino: u32, offset: u64, len: u64) -> Result<()> {
+        self.mutate_synced(&[ino], &[], |v| v.complete_kernel_write(ino, offset, len))
+    }
+
     pub fn write(&self, ino: u32, offset: u64, data: &[u8]) -> Result<usize> {
         // Split very large writes so each operation stays well inside one
         // journal transaction.

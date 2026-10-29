@@ -166,7 +166,16 @@ final class Ext4Volume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
         return pointer != nil
     }
 
+    /// FSKit asks for a no-wait sync on every reclaim (for example once per
+    /// file in `rm -r`); a full commit each time made deleting slow. The
+    /// engine commits within a second anyway, so no-wait returns at once.
     func synchronize(flags: FSSyncFlags, replyHandler reply: @escaping ((any Error)?) -> Void) {
+        // FSSyncFlags is an NS_ENUM with bit values, so test the bits.
+        let bits = flags.rawValue
+        if bits & FSSyncFlags.noWait.rawValue != 0 && bits & FSSyncFlags.wait.rawValue == 0 {
+            reply(nil)
+            return
+        }
         reply(ffiResult { ext4fs_sync($0) })
     }
 
@@ -519,6 +528,10 @@ final class Ext4Volume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
         if wants(.modifyTime) { result.modifyTime = posixTime(attr.mtime) }
         if wants(.changeTime) { result.changeTime = posixTime(attr.ctime) }
         if wants(.birthTime), attr.has_btime { result.birthTime = posixTime(attr.btime) }
+        // Regular files use kernel-offloaded I/O (inline-data files only on
+        // read-only volumes do not). Always set: FSKit reads it without
+        // listing it as wanted.
+        result.inhibitKernelOffloadedIO = !attr.kernel_io
         return result
     }
 
@@ -526,6 +539,90 @@ final class Ext4Volume: FSVolume, FSVolume.Operations, FSVolume.ReadWriteOperati
         guard let context, let name, nameLength >= 0 else { return false }
         let state = Unmanaged<DirectoryEnumerationContext>.fromOpaque(context).takeUnretainedValue()
         return state.pack(name: name, length: nameLength, inode: inode, fileType: fileType, nextCookie: nextCookie, attr: attr)
+    }
+}
+
+/// Kernel-offloaded I/O: the kernel moves file data itself. This volume only
+/// maps file ranges to the device (ext4fs_blockmap) and records completed
+/// writes (ext4fs_complete_write). See crates/ext4-core/src/koio.rs.
+///
+/// The conformance to FSVolumeKernelOffloadedIOOperations is declared in
+/// Ext4Volume+KernelIO.m, which also implements completeIO: FSKit passes
+/// nil for its nonnull `status` on success, and the Swift thunk crashes
+/// converting that nil before any Swift code runs. These methods carry the
+/// protocol's Objective-C selectors.
+extension Ext4Volume {
+    /// Longest extent the packer takes, kept a multiple of 4 KiB.
+    private static let maxExtentLength = UInt64(UInt32.max) & ~0xFFF
+
+    @objc(blockmapFile:offset:length:flags:operationID:packer:replyHandler:)
+    func blockmapFile(_ file: FSItem, offset: off_t, length: Int, flags: FSBlockmapFlags, operationID: FSOperationID, packer: FSExtentPacker, replyHandler reply: @escaping @Sendable ((any Error)?) -> Void) {
+        guard let item = file as? Ext4Item, offset >= 0, length > 0 else {
+            reply(posixError(Int32(EINVAL)))
+            return
+        }
+        let write = flags.contains(.write)
+        if write && readOnly {
+            reply(posixError(Int32(EROFS)))
+            return
+        }
+        var extents = [ext4fs_extent](repeating: ext4fs_extent(), count: 64)
+        var count = 0
+        let result = extents.withUnsafeMutableBufferPointer { buffer in
+            withVolume { ext4fs_blockmap($0, item.inode, UInt64(offset), UInt64(length), write, buffer.baseAddress, buffer.count, &count) }
+        }
+        guard result == 0 else {
+            reply(posixError(result))
+            return
+        }
+        // FSKit asks again from the end of what fits in the packer.
+        packing: for extent in extents.prefix(count) {
+            // A write mapping is always writable data (unwritten blocks
+            // become written in completeIO). For reads, holes and unwritten
+            // blocks read as zeros.
+            let type: FSExtentType = write || Int32(extent.kind) == EXT4FS_EXTENT_DATA ? .data : .zeroFill
+            var logical = extent.logical
+            var physical = type == .data ? extent.physical : 0
+            var remaining = extent.length
+            while remaining > 0 {
+                let n = min(remaining, Ext4Volume.maxExtentLength)
+                if !packer.packExtent(resource: bridge.resource, type: type, logicalOffset: off_t(logical), physicalOffset: off_t(physical), length: Int(n)) {
+                    break packing
+                }
+                logical += n
+                if type == .data { physical += n }
+                remaining -= n
+            }
+        }
+        reply(nil)
+    }
+
+    /// Called by completeIO (Ext4Volume+KernelIO.m). Failed writes leave
+    /// their blocks unwritten, so they read as zeros.
+    @objc(ext4CompleteIOFor:offset:length:succeeded:write:replyHandler:)
+    func completeKernelIO(for file: FSItem, offset: off_t, length: Int, succeeded: Bool, write: Bool, replyHandler reply: @escaping @Sendable ((any Error)?) -> Void) {
+        guard let item = file as? Ext4Item, offset >= 0, length >= 0 else {
+            reply(posixError(Int32(EINVAL)))
+            return
+        }
+        guard write, succeeded, length > 0 else {
+            reply(nil)
+            return
+        }
+        reply(ffiResult { ext4fs_complete_write($0, item.inode, UInt64(offset), UInt64(length)) })
+    }
+
+    // These variants may pack extents to save a later blockmap call; that
+    // is optional ("only opportunistically"), so they do plain create and
+    // lookup.
+    @objc(createFileNamed:inDirectory:attributes:packer:replyHandler:)
+    func createFile(name: FSFileName, in directory: FSItem, attributes: FSItem.SetAttributesRequest, packer: FSExtentPacker, replyHandler reply: @escaping @Sendable (FSItem?, FSFileName?, (any Error)?) -> Void) {
+        createItem(named: name, type: .file, inDirectory: directory, attributes: attributes, replyHandler: reply)
+    }
+
+    @objc(lookupItemNamed:inDirectory:packer:replyHandler:)
+    func lookupItem(name: FSFileName, in directory: FSItem, packer: FSExtentPacker, replyHandler reply: @escaping @Sendable (FSItem?, FSFileName?, (any Error)?) -> Void) {
+        lookupItem(named: name, inDirectory: directory, replyHandler: reply)
     }
 }
 

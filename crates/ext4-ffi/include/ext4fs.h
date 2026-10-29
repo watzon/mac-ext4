@@ -100,6 +100,7 @@ typedef struct ext4fs_attr {
     uint32_t rdev;         /* makedev(major, minor) for device nodes */
     uint32_t generation;
     bool has_btime;
+    bool kernel_io;        /* the kernel may do this file's data I/O (ext4fs_blockmap) */
     ext4fs_timespec atime;
     ext4fs_timespec mtime;
     ext4fs_timespec ctime;
@@ -195,6 +196,39 @@ int32_t ext4fs_read(ext4fs_volume *vol, uint64_t ino, uint64_t offset, void *buf
 
 int32_t ext4fs_write(ext4fs_volume *vol, uint64_t ino, uint64_t offset, const void *buf, size_t len,
                      size_t *written_out);
+
+/* ---- Kernel-offloaded I/O ---------------------------------------------- */
+
+/* With kernel-offloaded I/O the kernel moves file data itself; the module
+ * only maps file ranges to the device. Only files whose ext4fs_attr has
+ * kernel_io set take part. */
+
+#define EXT4FS_EXTENT_DATA      0  /* initialized data at physical */
+#define EXT4FS_EXTENT_HOLE      1  /* not allocated: reads as zeros */
+#define EXT4FS_EXTENT_UNWRITTEN 2  /* allocated, reads as zeros; writable */
+
+typedef struct ext4fs_extent {
+    uint64_t logical;   /* byte offset in the file */
+    uint64_t physical;  /* byte offset on the device (0 for holes) */
+    uint64_t length;    /* bytes */
+    uint8_t kind;       /* EXT4FS_EXTENT_* */
+} ext4fs_extent;
+
+/* Map bytes [offset, offset + length) of ino into at most cap extents;
+ * *count_out receives the number filled. The first extent starts at
+ * offset; ask again from the end of the last one for the rest.
+ * With write, holes are allocated (as unwritten blocks) and no extent is a
+ * hole; the size does not change until ext4fs_complete_write. A write
+ * mapping can be shorter than asked when the volume is full (ENOSPC only
+ * when nothing could be mapped). */
+int32_t ext4fs_blockmap(ext4fs_volume *vol, uint64_t ino, uint64_t offset, uint64_t length,
+                        bool write, ext4fs_extent *out, size_t cap, size_t *count_out);
+
+/* The kernel finished writing bytes [offset, offset + length) of ino:
+ * marks the blocks written, grows the size to cover them, and updates the
+ * modification time. */
+int32_t ext4fs_complete_write(ext4fs_volume *vol, uint64_t ino, uint64_t offset,
+                              uint64_t length);
 
 /* Writes the symlink target (not NUL-terminated) into buf. ERANGE if cap is
  * too small; *len_out always receives the full length. */

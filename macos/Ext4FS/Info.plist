@@ -124,6 +124,8 @@
 		<string>ext4</string>
 		<key>FSSupportsBlockResources</key>
 		<true/>
+		<key>FSSupportsKernelOffloadedIO</key>
+		<true/>
 		<key>FSSupportsGenericURLResources</key>
 		<false/>
 		<key>FSSupportsPathURLs</key>

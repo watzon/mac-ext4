@@ -411,6 +411,58 @@ impl Volume {
 
     /// Apply `f` to a tree node: the inode root when `blk` is `None`,
     /// otherwise a staged copy of block `blk`, whose checksum is renewed.
+    /// Mark the last extent of the file written if it is unwritten and lies
+    /// inside blocks [first, end), merging it into the previous extent when
+    /// both are written and contiguous. Edits only the rightmost leaf.
+    /// Returns false (nothing changed) when this fast path does not apply.
+    pub(crate) fn extent_tail_written(
+        &mut self,
+        ino: u32,
+        inode: &mut Inode,
+        first: u64,
+        end: u64,
+    ) -> Result<bool> {
+        let path = self.rightmost_path(inode, ino)?;
+        let (leaf_blk, leaf) = path[path.len() - 1].clone();
+        let h = parse_header(&leaf)?;
+        if h.entries == 0 {
+            return Ok(false);
+        }
+        let n = h.entries as usize;
+        let at = 12 + (n - 1) * 12;
+        let last = parse_extent(&leaf, at);
+        if !last.unwritten || (last.logical as u64) < first || last.end() > end {
+            return Ok(false);
+        }
+        let seed = Inode::csum_seed(&self.sb, ino, inode.generation());
+        let written = Extent {
+            unwritten: false,
+            ..last
+        };
+        if n >= 2 {
+            let prev_at = at - 12;
+            let prev = parse_extent(&leaf, prev_at);
+            if !prev.unwritten
+                && prev.end() == last.logical as u64
+                && prev.physical + prev.len as u64 == last.physical
+                && prev.len + last.len <= MAX_INIT_LEN
+            {
+                let merged = Extent {
+                    len: prev.len + last.len,
+                    ..prev
+                };
+                self.edit_node(inode, leaf_blk, seed, |b| {
+                    put_extent(b, prev_at, &merged);
+                    b[at..at + 12].fill(0);
+                    put16(b, 2, h.entries - 1);
+                })?;
+                return Ok(true);
+            }
+        }
+        self.edit_node(inode, leaf_blk, seed, |b| put_extent(b, at, &written))?;
+        Ok(true)
+    }
+
     fn edit_node(
         &mut self,
         inode: &mut Inode,

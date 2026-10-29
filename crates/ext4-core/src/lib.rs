@@ -26,6 +26,7 @@ pub mod hash;
 mod inline;
 pub mod inode;
 pub mod journal;
+pub mod koio;
 pub mod mkfs;
 pub mod ops;
 mod orphan;
